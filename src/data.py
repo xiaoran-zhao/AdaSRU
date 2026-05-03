@@ -23,10 +23,7 @@ class SplitData:
     num_users: int
     num_items: int
 
-    # 完整训练集：retain + forget，用于训练原始模型
     full_train_user_items: Dict[int, List[int]]
-
-    # 保留训练集：去掉 forget，用于 retrain baseline 或遗忘后模型
     retain_user_items: Dict[int, List[int]]
 
     val_pairs: List[Tuple[int, int]]
@@ -95,7 +92,6 @@ def build_random_user_ratio_split(
     data_dir = download_ml1m(data_root)
     df = parse_ratings(data_dir)
 
-    # 只保留正反馈交互
     df = df[df['rating'] >= positive_threshold].copy()
     df, _, _ = remap_ids(df)
 
@@ -156,7 +152,6 @@ def build_random_user_ratio_split(
         all_pos[uid] = set(int(i) for i in items)
         full_train_pairs.extend((uid, int(i)) for i in train)
 
-    # 从完整训练集中抽取 forget_pairs
     forget_pairs: List[Tuple[int, int]] = []
 
     for uid, item in full_train_pairs:
@@ -166,7 +161,6 @@ def build_random_user_ratio_split(
         if random.random() < forget_ratio:
             forget_pairs.append((uid, item))
 
-    # 按用户组织 forget 交互
     forget_by_user: Dict[int, set] = {}
 
     for uid, iid in forget_pairs:
@@ -190,7 +184,6 @@ def build_random_user_ratio_split(
 
         retain_user_items[uid] = kept
 
-    # 根据修正后的 forget_by_user 重新生成 forget_pairs
     forget_pairs = [
         (u, i)
         for u, items in forget_by_user.items()
