@@ -9,42 +9,32 @@ import torch
 
 from .model import LightGCN
 
-
-# 将 [(u, i), (u, j), (v, k)] 这种二元组列表，按用户聚合成 {u: [i, j], v: [k]}
 def group_eval_pairs(eval_pairs: Sequence[Tuple[int, int]]) -> dict[int, list[int]]:
     user_pos = defaultdict(list)
     for u, i in eval_pairs:
         user_pos[int(u)].append(int(i))
     return dict(user_pos)
 
-
-# 计算单个用户在前 k 个位置上的 precision 曲线
 def precision_at_k(ranklist: list[int], ground_truth: set[int]) -> np.ndarray:
     hits = np.array([1.0 if item in ground_truth else 0.0 for item in ranklist], dtype=np.float32)
     return np.cumsum(hits) / np.arange(1, len(ranklist) + 1)
 
-
-# 计算单个用户在前 k 个位置上的 recall 曲线
 def recall_at_k(ranklist: list[int], ground_truth: set[int]) -> np.ndarray:
     hits = np.array([1.0 if item in ground_truth else 0.0 for item in ranklist], dtype=np.float32)
     return np.cumsum(hits) / max(len(ground_truth), 1)
 
-
-# 计算单个用户在前 k 个位置上的 ndcg 曲线
 def ndcg_at_k(ranklist: list[int], ground_truth: set[int]) -> np.ndarray:
     len_rank = len(ranklist)
     len_gt = len(ground_truth)
     if len_gt == 0:
         return np.zeros(len_rank, dtype=np.float32)
 
-    # 实际 DCG
     gains = np.array(
         [1.0 / math.log2(idx + 2) if item in ground_truth else 0.0 for idx, item in enumerate(ranklist)],
         dtype=np.float32,
     )
     dcg = np.cumsum(gains)
 
-    # 理想 IDCG
     idcg_len = min(len_gt, len_rank)
     ideal_gains = np.array([1.0 / math.log2(i + 2) for i in range(len_rank)], dtype=np.float32)
     idcg = np.cumsum(ideal_gains)
@@ -52,8 +42,6 @@ def ndcg_at_k(ranklist: list[int], ground_truth: set[int]) -> np.ndarray:
 
     return dcg / idcg
 
-
-# 评测：按用户多正样本方式计算 Precision / Recall / NDCG
 @torch.no_grad()
 def evaluate_ranking(
     model: LightGCN,
@@ -63,38 +51,30 @@ def evaluate_ranking(
     num_items: int,
     k: int = 10,
 ) -> dict[str, float]:
-    # 切换到评估模式
+
     model.eval()
 
-    # 获取最终用户和物品嵌入
     user_emb, item_emb = model.get_user_item_embeddings(norm_adj)
 
-    # 将 (u, i) 列表按用户聚合
     user_test = group_eval_pairs(eval_pairs)
 
     precisions = []
     recalls = []
     ndcgs = []
 
-    # 逐个用户评测
     for u, gt_items in user_test.items():
         ground_truth = set(gt_items)
 
-        # 对该用户的所有物品打分
         scores = torch.matmul(item_emb, user_emb[u]).detach().cpu().numpy()
 
-        # 将训练集中出现过的正样本物品屏蔽掉，避免参与排序
-        # 注意：这里保留 ground_truth 自身，即使它们也在 all_pos 里，仍应作为测试目标参与评测
         train_pos = set(all_pos[u]) - ground_truth
         if len(train_pos) > 0:
             scores[list(train_pos)] = -np.inf
 
-        # 取前 k 个物品索引
         topk_idx = np.argpartition(-scores, kth=min(k, len(scores) - 1))[:k]
         topk_idx = topk_idx[np.argsort(-scores[topk_idx])]
         ranklist = topk_idx.tolist()
 
-        # 计算该用户的 Precision@K、Recall@K、NDCG@K
         p = precision_at_k(ranklist, ground_truth)
         r = recall_at_k(ranklist, ground_truth)
         n = ndcg_at_k(ranklist, ground_truth)
@@ -109,7 +89,6 @@ def evaluate_ranking(
         f'ndcg@{k}': float(np.mean(ndcgs)) if ndcgs else 0.0,
     }
 
-# 评估遗忘强度，这部分保留你原来的定义
 @torch.no_grad()
 def forget_score(
     model: LightGCN,
