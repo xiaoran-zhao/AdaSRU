@@ -25,11 +25,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--output_dir', type=str, default='runs/ml1m_fulltrain')
     p.add_argument('--seed', type=int, default=42)
 
-    # 从完整训练集中抽取多少比例作为 forget 数据
-    # 注意：forget 数据仍然参与 fulltrain 原始模型训练
     p.add_argument('--forget_ratio', type=float, default=0.1)
 
-    # 评分 >= positive_threshold 视为正反馈
     p.add_argument('--positive_threshold', type=int, default=4)
 
     p.add_argument('--emb_dim', type=int, default=64)
@@ -78,7 +75,6 @@ def main() -> None:
         print(f'forget ratio in full train: {num_forget / num_full_train:.4f}')
         print(f'retain ratio in full train: {num_retain / num_full_train:.4f}')
 
-    # 原始模型使用完整训练集训练：retain + forget
     norm_adj = build_normalized_adj(
         split.num_users,
         split.num_items,
